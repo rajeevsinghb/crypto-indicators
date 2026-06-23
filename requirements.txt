@@ -1,6 +1,5 @@
 pandas
 numpy
-pandas-ta
 gspread
 gspread-dataframe
 google-auth
