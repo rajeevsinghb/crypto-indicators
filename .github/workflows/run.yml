@@ -14,7 +14,13 @@ jobs:
         with:
           python-version: "3.10"
 
-      - run: pip install -r requirements.txt
+      - name: Install Requirements
+        run: pip install -r requirements.txt
+
+      - name: Install pandas_ta test
+        run: |
+          pip install git+https://github.com/twopirllc/pandas-ta.git
+          python -c "import pandas_ta as ta; print('PANDAS_TA_OK')"
 
       - name: Run OHLCV
         run: python OHLCV.py
