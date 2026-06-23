@@ -1,38 +1,68 @@
 # =========================
-# INSTALL
+# INSTALL (run this once in terminal, not needed inside script)
+# pip install pandas-ta gspread gspread-dataframe google-auth pandas
 # =========================
-# FIX (pandas pin REVERTED): pinning pandas==2.2.2 caused a HARD
-# ResolutionImpossible error because the pandas-ta version currently
-# on PyPI requires a newer pandas. That's worse than the original
-# harmless warning. So pandas is left unpinned here - the original
-# "incompatible" message from google-colab/gradio was cosmetic only,
-# the script ran fine despite it. Don't try to force-pin pandas
-# alongside pandas-ta in the same install command.
-
-!pip -q install pandas-ta gspread gspread-dataframe google-auth pandas
+# NOTE (pandas pin): don't pin pandas==2.2.2 alongside pandas-ta in the
+# same install - causes a hard ResolutionImpossible error. Leave pandas
+# unpinned; any "incompatible" warning from unrelated packages is cosmetic.
 
 # =========================
 # IMPORTS
 # =========================
 
+import os
 import pandas as pd
 import pandas_ta as ta
 import numpy as np
 import gspread
 
-from google.colab import auth
-from google.auth import default
+from google.oauth2.service_account import Credentials
 from gspread_dataframe import get_as_dataframe
 from gspread_dataframe import set_with_dataframe
 
 # =========================
-# GOOGLE AUTH
+# GOOGLE AUTH (Service Account - works on GitHub/local/server)
 # =========================
+#
+# Colab's "auth.authenticate_user()" only works inside a Colab notebook
+# (browser popup auth). On GitHub Actions / local / any server, we use
+# a Service Account JSON key instead.
+#
+# SETUP STEPS (one-time):
+# 1. Google Cloud Console -> IAM & Admin -> Service Accounts -> Create.
+# 2. Enable "Google Sheets API" and "Google Drive API" for the project.
+# 3. Create a JSON key for that service account, download it.
+# 4. Open your Google Sheet -> Share -> add the service account's
+#    email (xxxx@xxxx.iam.gserviceaccount.com) as Editor.
+# 5. Save the JSON key as credentials.json next to this script
+#    (add it to .gitignore - never commit it), OR set its full JSON
+#    content as the GOOGLE_CREDENTIALS_JSON environment variable
+#    (recommended for GitHub Actions secrets).
 
-auth.authenticate_user()
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
 
-creds, _ = default()
-gc = gspread.authorize(creds)
+def get_gspread_client():
+    """
+    Tries to load credentials from:
+    1. GOOGLE_CREDENTIALS_JSON env var (paste full JSON content as a secret)
+    2. credentials.json file in the same folder (local use)
+    """
+    creds_json_env = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+
+    if creds_json_env:
+        import json
+        creds_dict = json.loads(creds_json_env)
+        creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+    else:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+
+    return gspread.authorize(creds)
+
+
+gc = get_gspread_client()
 
 # =========================
 # SETTINGS
@@ -41,7 +71,7 @@ gc = gspread.authorize(creds)
 SPREADSHEET_ID = "13DYY42q_PDLxinGkqT1rigsG2t8zzOioFBcL-suOQFU"
 
 # ----------------------------------
-# ANALYSIS MODE (NEW) - must be defined before OUTPUT_SHEET below
+# ANALYSIS MODE - must be defined before OUTPUT_SHEET below
 # ----------------------------------
 # "LATEST" -> current behavior: analyze the most recent available
 #             candle for each coin (daily monitoring snapshot).
@@ -72,8 +102,8 @@ OUTPUT_SHEET = "DB" if ANALYSIS_MODE == "LATEST" else "DB_RANGE"
 # ----------------------------------
 # IMPORTANT: set this to whatever timezone your raw "date" column's
 # daily candle close is anchored to (most exchanges = UTC).
-# Colab server clock is UTC by default, but if your sheet dates are
-# IST-anchored, change this to "Asia/Kolkata".
+# On GitHub Actions / most servers the clock is UTC by default, but if
+# your sheet dates are IST-anchored, change this to "Asia/Kolkata".
 
 DATA_TIMEZONE = "UTC"
 
@@ -551,7 +581,7 @@ def get_period_levels(coin_df):
 
 
 # =========================
-# SHEET1 SYMBOL ORDER (NEW)
+# SHEET1 SYMBOL ORDER
 # =========================
 # Capture the original coin order from Sheet1 (the fetch-list sheet)
 # so the DB output can be written back in that SAME sequence, instead
@@ -1204,7 +1234,7 @@ remaining_cols = [c for c in out_df.columns if c not in existing_cols]
 out_df = out_df[existing_cols + remaining_cols]
 
 # =========================
-# SORT OUTPUT IN SHEET1'S ORIGINAL SYMBOL ORDER (NEW)
+# SORT OUTPUT IN SHEET1'S ORIGINAL SYMBOL ORDER
 # =========================
 # Instead of alphabetical, match the row order of Sheet1 (your
 # fetch-list). Coins not found in sheet1_order (shouldn't normally
