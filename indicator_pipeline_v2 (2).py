@@ -50,7 +50,7 @@ def get_gspread_client():
     1. GOOGLE_CREDENTIALS_JSON env var (paste full JSON content as a secret)
     2. credentials.json file in the same folder (local use)
     """
-    creds_json_env = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    creds_json_env = os.environ.get("GOOGLE_CREDENTIALS")
 
     if creds_json_env:
         import json
