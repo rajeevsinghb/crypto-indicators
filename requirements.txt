@@ -1,5 +1,8 @@
 pandas
 numpy
-requests
+pandas_ta
 gspread
+gspread-dataframe
 google-auth
+ccxt
+requests
