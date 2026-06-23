@@ -21,6 +21,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Show Python Version
+        run: |
+          python --version
+
+      - name: Show Installed Packages
+        run: |
+          pip list
+
       - name: Verify TA Library
         run: |
           python -c "import pandas_ta as ta; print('PANDAS_TA_OK')"
