@@ -1,30 +1,33 @@
 name: Crypto Indicators
 
 on:
-workflow_dispatch:
+  workflow_dispatch:
 
 jobs:
-run:
-runs-on: ubuntu-latest
+  run:
+    runs-on: ubuntu-latest
 
-```
-steps:
-  - uses: actions/checkout@v4
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-  - uses: actions/setup-python@v5
-    with:
-      python-version: "3.10"
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
 
-  - name: Install Requirements
-    run: pip install -r requirements.txt
+      - name: Install Requirements
+        run: |
+          pip install -r requirements.txt
 
-  - name: Run OHLCV
-    run: python OHLCV.py
-    env:
-      GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+      - name: Run OHLCV
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: |
+          python OHLCV.py
 
-  - name: Run Indicators
-    run: python "indicator_pipeline_v2 (2).py"
-    env:
-      GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-```
+      - name: Run Indicators
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: |
+          python "indicator_pipeline_v2 (2).py"
