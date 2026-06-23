@@ -38,23 +38,19 @@ SCOPES = [
 ]
 
 def get_gspread_client():
-
-```
-import json
-import os
-
-creds_json = os.environ["GOOGLE_CREDENTIALS"]
-
-creds_dict = json.loads(creds_json)
-
-creds = Credentials.from_service_account_info(
-    creds_dict,
-    scopes=SCOPES
-)
-
-return gspread.authorize(creds)
-```
-
+    import json
+    import os
+    
+    creds_json = os.environ["GOOGLE_CREDENTIALS"]
+    
+    creds_dict = json.loads(creds_json)
+    
+    creds = Credentials.from_service_account_info(
+        creds_dict,
+        scopes=SCOPES
+    )
+    
+    return gspread.authorize(creds)
 
 gc = get_gspread_client()
 
