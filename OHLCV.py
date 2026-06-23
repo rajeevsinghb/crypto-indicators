@@ -1,32 +1,61 @@
 # =========================
-# INSTALL LIBRARIES
+# INSTALL LIBRARIES (run this once in terminal, not needed inside script)
+# pip install ccxt pandas gspread gspread-dataframe google-auth
 # =========================
 
-!pip -q install ccxt pandas gspread gspread-dataframe google-auth
-
-# =========================
-# IMPORTS
-# =========================
-
+import os
 import time
 import random
 import ccxt
 import pandas as pd
 import gspread
 
-from google.colab import auth
-from google.auth import default
+from google.oauth2.service_account import Credentials
 from gspread_dataframe import set_with_dataframe
 from gspread.exceptions import APIError
 
 # =========================
-# GOOGLE AUTH
+# GOOGLE AUTH (Service Account - works on GitHub/local/server)
 # =========================
+#
+# Colab me "auth.authenticate_user()" sirf Colab notebook ke andar kaam
+# karta hai (browser popup ke through). GitHub / local / server pe ye
+# available nahi hota, isliye Service Account JSON key use karte hain.
+#
+# SETUP STEPS (one-time):
+# 1. Google Cloud Console -> IAM & Admin -> Service Accounts -> Create.
+# 2. Enable "Google Sheets API" and "Google Drive API" for the project.
+# 3. Create a JSON key for that service account, download it.
+# 4. Open your Google Sheet -> Share -> add the service account's
+#    email (looks like xxxx@xxxx.iam.gserviceaccount.com) as Editor.
+# 5. Save the JSON key file as credentials.json next to this script
+#    (DO NOT commit this file to GitHub - add it to .gitignore),
+#    OR set it as an environment variable (recommended for GitHub Actions).
 
-auth.authenticate_user()
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
 
-creds, _ = default()
-gc = gspread.authorize(creds)
+def get_gspread_client():
+    """
+    Tries to load credentials from:
+    1. GOOGLE_CREDENTIALS_JSON env var (paste full JSON content as a secret)
+    2. credentials.json file in the same folder (local use)
+    """
+    creds_json_env = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+
+    if creds_json_env:
+        import json
+        creds_dict = json.loads(creds_json_env)
+        creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+    else:
+        creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+
+    return gspread.authorize(creds)
+
+
+gc = get_gspread_client()
 
 # =========================
 # SETTINGS
@@ -391,4 +420,3 @@ print("Lookback Days  :", LOOKBACK_DAYS)
 print("Rows Written   :", len(df))
 print("Output Sheet   : Sheet2")
 print("====================================")
-
