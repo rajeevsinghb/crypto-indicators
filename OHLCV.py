@@ -38,21 +38,22 @@ SCOPES = [
 ]
 
 def get_gspread_client():
-    """
-    Tries to load credentials from:
-    1. GOOGLE_CREDENTIALS_JSON env var (paste full JSON content as a secret)
-    2. credentials.json file in the same folder (local use)
-    """
-    creds_json_env = os.environ.get("GOOGLE_CREDENTIALS_JSON")
 
-    if creds_json_env:
-        import json
-        creds_dict = json.loads(creds_json_env)
-        creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-    else:
-        creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+```
+import json
+import os
 
-    return gspread.authorize(creds)
+creds_json = os.environ["GOOGLE_CREDENTIALS"]
+
+creds_dict = json.loads(creds_json)
+
+creds = Credentials.from_service_account_info(
+    creds_dict,
+    scopes=SCOPES
+)
+
+return gspread.authorize(creds)
+```
 
 
 gc = get_gspread_client()
