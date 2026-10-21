@@ -62,7 +62,7 @@ SPREADSHEET_ID = "13DYY42q_PDLxinGkqT1rigsG2t8zzOioFBcL-suOQFU"
 
 # Change anytime
 QUOTE_CURRENCY = "USDT"     # USDT / USDC / USD
-LOOKBACK_DAYS = 365          # 30 / 90 / 365 etc.
+LOOKBACK_DAYS = 800          # >= ~740 chahiye taaki previous-year high/low bane
 
 # Exchange Priority
 EXCHANGE_PRIORITY = [
@@ -248,6 +248,27 @@ print(
 # FIND USDT SYMBOL ONLY
 # =========================
 
+def fetch_all_daily(exchange, symbol, days, page_limit=100):
+    """Exchange ki per-call limit se bachne ke liye pages me daily candles laata hai."""
+    day_ms = 86_400_000
+    now = exchange.milliseconds()
+    since = now - days * day_ms
+    out, seen = [], set()
+    for _ in range(40):                       # safety cap
+        batch = exchange.fetch_ohlcv(symbol, timeframe="1d", since=since, limit=page_limit)
+        if not batch:
+            break
+        new = [c for c in batch if c[0] not in seen]
+        if not new:
+            break
+        seen.update(c[0] for c in new)
+        out.extend(new)
+        since = batch[-1][0] + day_ms
+        if batch[-1][0] >= now - day_ms:
+            break
+    return sorted(out, key=lambda c: c[0])
+
+
 def find_symbol(coin):
 
     target_symbol = (
@@ -314,11 +335,7 @@ for idx, coin in enumerate(
 
     try:
 
-        candles = exchange.fetch_ohlcv(
-            market_symbol,
-            timeframe="1d",
-            limit=LOOKBACK_DAYS
-        )
+        candles = fetch_all_daily(exchange, market_symbol, LOOKBACK_DAYS)
 
         print(
             f"{ex_name} | "
