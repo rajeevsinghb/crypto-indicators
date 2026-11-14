@@ -1,0 +1,821 @@
+//@version=6
+indicator("RB-A04-Correlation Lead-Lag Scanner", shorttitle="RB-A04", overlay=true, max_lines_count=500)
+
+//====================================================
+// INPUT GROUPS  (flow: Quick Start -> Assets -> Range -> Calc -> Scanner -> Windows -> Classification -> Lead-Lag -> Style)
+//====================================================
+string g1 = "01. QUICK START (tables on/off + pair + page)"
+string g2 = "02. ASSET LIST"
+string g3 = "03. DATE / RANGE"
+string g4 = "04. DATA CALCULATION"
+string g5 = "05. SCANNER SETTINGS"
+string g6 = "06. ROLLING WINDOWS (pair study)"
+string g7 = "07. CLASSIFICATION (strong / weak / trend)"
+string g8 = "08. LEAD-LAG SETTINGS"
+string g9 = "09. TABLE STYLE (size / position)"
+
+//====================================================
+// 01. QUICK START
+//====================================================
+showScanner = input.bool(true, "Show Scanner Table", group=g1, display=display.none,
+     tooltip="Scanner table: asset list me se wo pairs jo ek doosre ko closely follow karte hain (Corr, pichla Corr, Trend, Lead-Lag). Settings Section 05 me. Size/position Section 09 me.")
+showPair = input.bool(false, "Show Pair Study Table", group=g1, display=display.none,
+     tooltip="Pair Study table: do selected assets ka deep study - rolling windows (30/60/90...), lead-lag, speed aur performance. Section on/off niche ke toggles se. Scanner aur Pair table dono Top Right par hain, isliye ek time par ek hi ON rakhein ya position alag karein.")
+studyA = input.int(1, "Pair Asset A (slot no.)", minval=1, maxval=20, group=g1, display=display.none,
+     tooltip="Deep study ke liye pehla asset. Section 02 ki Asset List me slot number (1-20) daalein. Asset A aur B alag hone chahiye.")
+studyB = input.int(2, "Pair Asset B (slot no.)", minval=1, maxval=20, group=g1, display=display.none,
+     tooltip="Deep study ke liye doosra asset (slot number 1-20).")
+studyRank = input.int(0, "Study Pair From Scanner Rank (0 = manual)", minval=0, maxval=500, group=g1, display=display.none,
+     tooltip="0 = upar ke Asset A / B slots use honge.\n1, 2, 3... = Scanner table ke us # (rank) wali pair ka seedha deep study. Scanner me pair dekhi, uska # yahan daalein - A/B manually dhoondhne ki zaroorat nahi.")
+secPhases = input.bool(true, "Pair Section A: Rolling Correlation Phases", group=g1, display=display.none,
+     tooltip="Har window (30/60/90...) ki correlation 'Now' aur pichle 3 snapshots me. Isse dikhta hai ki relation strong ho raha hai, weak ho raha hai ya khatam ho chuka hai.")
+secLead = input.bool(true, "Pair Section B: Lead-Lag & Speed", group=g1, display=display.none,
+     tooltip="Har window me best lag: kaun sa asset leader hai, kaun follower, kitne bars/time baad follow karta hai, aur follower leader ke 1% move par kitna move karta hai (Beta).")
+secProfile = input.bool(false, "Pair Section C: Lag Profile (primary window)", group=g1, display=display.none,
+     tooltip="Primary window ke liye har lag (-L se +L) par correlation, bar ke saath. Lead-lag ka poora shape ek nazar me dikhta hai.")
+secPerf = input.bool(true, "Pair Section D: Performance & Risk", group=g1, display=display.none,
+     tooltip="Har window me dono assets ka return, spread (A - B), Beta (B on A), R-squared aur volatility.")
+rowsPerPage = input.int(16, "Rows Per Page (0 = All)", minval=0, maxval=100, group=g1, display=display.none,
+     tooltip="Scanner list lambi ho to ek page me kitni rows dikhani hain (e.g. 12 ya 16). 0 = saari rows ek saath. TradingView me table scroll nahi hoti, isliye Page No. se step by step dekhein.")
+pageNo = input.int(1, "Page No.", minval=1, maxval=50, group=g1, display=display.none,
+     tooltip="Scanner ka kaun sa page dikhana hai (1, 2, 3...). Table me 'Page x / y' likha aata hai. Total pages se zyada number dein to last page dikhega.")
+
+//====================================================
+// 02. ASSET LIST
+//====================================================
+nAssets = input.int(12, "Number of Active Assets", minval=2, maxval=20, group=g2, display=display.none,
+     tooltip="Neeche ki list me se pehle kitne slots scan hone hain (2 se 20). Zyada assets = zyada pairs aur zyada load. 20 assets = 190 pairs. Har asset ek data request leta hai (limit 40 ke andar).")
+s1  = input.symbol("BINANCE:BTCUSDT", "Slot 1", group=g2, display=display.none, tooltip="Asset ka symbol (exchange:symbol). Sahi symbol hona chahiye, warna script error degi. Slot number Pair Asset A/B me use hota hai. Alag market (stocks/index) bhi daal sakte hain, par tab trading calendar alag hone se data kam match hoga.")
+s2  = input.symbol("BINANCE:ETHUSDT", "Slot 2", group=g2, display=display.none, tooltip="Slot 2 ka asset.")
+s3  = input.symbol("BINANCE:BNBUSDT", "Slot 3", group=g2, display=display.none, tooltip="Slot 3 ka asset.")
+s4  = input.symbol("BINANCE:SOLUSDT", "Slot 4", group=g2, display=display.none, tooltip="Slot 4 ka asset.")
+s5  = input.symbol("BINANCE:XRPUSDT", "Slot 5", group=g2, display=display.none, tooltip="Slot 5 ka asset.")
+s6  = input.symbol("BINANCE:ADAUSDT", "Slot 6", group=g2, display=display.none, tooltip="Slot 6 ka asset.")
+s7  = input.symbol("BINANCE:DOGEUSDT", "Slot 7", group=g2, display=display.none, tooltip="Slot 7 ka asset.")
+s8  = input.symbol("BINANCE:AVAXUSDT", "Slot 8", group=g2, display=display.none, tooltip="Slot 8 ka asset.")
+s9  = input.symbol("BINANCE:LINKUSDT", "Slot 9", group=g2, display=display.none, tooltip="Slot 9 ka asset.")
+s10 = input.symbol("BINANCE:DOTUSDT", "Slot 10", group=g2, display=display.none, tooltip="Slot 10 ka asset.")
+s11 = input.symbol("BINANCE:LTCUSDT", "Slot 11", group=g2, display=display.none, tooltip="Slot 11 ka asset.")
+s12 = input.symbol("BINANCE:TRXUSDT", "Slot 12", group=g2, display=display.none, tooltip="Slot 12 ka asset.")
+s13 = input.symbol("BINANCE:ATOMUSDT", "Slot 13", group=g2, display=display.none, tooltip="Slot 13 ka asset (Number of Active Assets 13+ ho tab scan hoga).")
+s14 = input.symbol("BINANCE:NEARUSDT", "Slot 14", group=g2, display=display.none, tooltip="Slot 14 ka asset.")
+s15 = input.symbol("BINANCE:ARBUSDT", "Slot 15", group=g2, display=display.none, tooltip="Slot 15 ka asset.")
+s16 = input.symbol("BINANCE:OPUSDT", "Slot 16", group=g2, display=display.none, tooltip="Slot 16 ka asset.")
+s17 = input.symbol("BINANCE:SUIUSDT", "Slot 17", group=g2, display=display.none, tooltip="Slot 17 ka asset.")
+s18 = input.symbol("BINANCE:APTUSDT", "Slot 18", group=g2, display=display.none, tooltip="Slot 18 ka asset.")
+s19 = input.symbol("BINANCE:INJUSDT", "Slot 19", group=g2, display=display.none, tooltip="Slot 19 ka asset.")
+s20 = input.symbol("BINANCE:UNIUSDT", "Slot 20", group=g2, display=display.none, tooltip="Slot 20 ka asset.")
+
+//====================================================
+// 03. DATE / RANGE  (RB-A02 jaisa)
+//====================================================
+useChartFirstAsFrom = input.bool(true, "Use Chart First Candle as Selected From", group=g3, display=display.none,
+     tooltip="ON: analysis chart ki sabse pehli candle se shuru hoga. OFF: neeche ki 'Manual Selected From' date use hogi.")
+manualFromDate = input.time(timestamp("01 Jan 2026 00:00 +0530"), "Manual Selected From", group=g3, display=display.none,
+     tooltip="Analysis start date-time. Sirf tab chalegi jab upar wala 'Use Chart First Candle' OFF ho.")
+toDate = input.time(timestamp("31 Dec 2026 23:59 +0530"), "Selected To", group=g3, display=display.none,
+     tooltip="Analysis end date-time. Rolling windows isi date par khatam hoti hain (is date ke baad ka data count nahi hota). Purani date daalkar dekh sakte hain ki us waqt relation kaisa tha.")
+showRangeVerticalLines = input.bool(true, "Show Selected From / To Vertical Lines", group=g3, display=display.none,
+     tooltip="ON: chart par Selected From (green dashed) aur Selected To (red dashed) vertical lines dikhengi.")
+displayTz = input.string("Asia/Kolkata", "Display Timezone", group=g3, display=display.none,
+     tooltip="IANA timezone, e.g. Asia/Kolkata, UTC, America/New_York. Table ki dates isi timezone me dikhengi.")
+
+//====================================================
+// 04. DATA CALCULATION
+//====================================================
+ignoreStale = input.bool(true, "Ignore Stale (unchanged close) Bars", group=g4, display=display.none,
+     tooltip="ON: jis bar me kisi asset ka close pichle bar jaisa hi hai (market band / data nahi aaya), use missing maana jayega. Crypto ke saath stocks/index mix karne par correlation 0 ki taraf girne se bachata hai.")
+minValidPct = input.float(80.0, "Min Valid Data in Window (%)", minval=30.0, maxval=100.0, step=5.0, group=g4, display=display.none,
+     tooltip="Window ke kam se kam itne % bars me dono assets ka data hona chahiye, warna us window ka result 'n/a' dikhega. Naye listed coins ka adhoora data galat nateeja na de, isliye.")
+
+//====================================================
+// 05. SCANNER SETTINGS
+//====================================================
+scanW = input.int(60, "Scan Window (bars)", minval=10, maxval=500, group=g5, display=display.none,
+     tooltip="Scanner kitne bars ki rolling correlation par chale. Bars chart timeframe ke hote hain (Daily chart par 60 = 60 din). Chhoti window = fast/short-term relation, badi window = stable relation.")
+minAbsCorr = input.float(0.70, "Min |Correlation| to List", minval=0.0, maxval=1.0, step=0.05, group=g5, display=display.none,
+     tooltip="Sirf wahi pairs list me aayengi jinki correlation (absolute) is value se zyada ho. 0.70 = closely follow. Zyada pairs dekhni hon to kam karein.")
+dirStr = input.string("Positive (follow)", "Direction Filter", options=["Positive (follow)", "Negative (inverse)", "Both"], group=g5, display=display.none,
+     tooltip="• Positive (follow): jo saath-saath chalte hain.\n• Negative (inverse): jo ulta chalte hain.\n• Both: dono.")
+trendShift = input.int(20, "Trend Compare Shift (bars)", minval=1, maxval=250, group=g5, display=display.none,
+     tooltip="Trend nikalne ke liye abhi ki correlation ko itne bars pehle (wahi window size) ki correlation se compare kiya jata hai. Chhota shift = recent change, bada shift = lamba trend.")
+sortStr = input.string("Abs Correlation (high to low)", "Sort Scanner Rows", options=["Abs Correlation (high to low)", "Correlation (high to low)", "Correlation (low to high)", "Strengthening first", "Weakening first"], group=g5, display=display.none,
+     tooltip="Scanner list ka order.\n• Abs Correlation: sabse closely related pehle.\n• Correlation high to low / low to high: signed value ke hisaab se.\n• Strengthening first: jinka relation abhi mazboot ho raha hai.\n• Weakening first: jinka relation toot raha hai.")
+
+//====================================================
+// 06. ROLLING WINDOWS
+//====================================================
+nWin = input.int(3, "Number of Windows (1-4)", minval=1, maxval=4, group=g6, display=display.none,
+     tooltip="Pair study me kitni rolling windows ek saath dikhani hain. Pehli window sabse chhoti rakhein, aakhri sabse badi (Verdict isi se nikalta hai).")
+win1 = input.int(30, "Window 1 (bars)", minval=5, maxval=500, group=g6, display=display.none, tooltip="Pehli (short-term) window. Daily chart par 30 = 30 din.")
+win2 = input.int(60, "Window 2 (bars)", minval=5, maxval=500, group=g6, display=display.none, tooltip="Doosri window (medium).")
+win3 = input.int(90, "Window 3 (bars)", minval=5, maxval=500, group=g6, display=display.none, tooltip="Teesri window (long).")
+win4 = input.int(180, "Window 4 (bars)", minval=5, maxval=500, group=g6, display=display.none, tooltip="Chauthi window (extra long). Sirf tab dikhegi jab Number of Windows = 4 ho.")
+snapStep = input.int(30, "Snapshot Step (bars)", minval=1, maxval=250, group=g6, display=display.none,
+     tooltip="Section A me har window ki correlation 'Now' ke saath itne-itne bars pehle (1x, 2x, 3x step) bhi dikhti hai. Isse relation ka purana se naya safar dikhta hai (strong -> weak ya weak -> strong).")
+
+//====================================================
+// 07. CLASSIFICATION
+//====================================================
+strongThr = input.float(0.60, "Strong Correlation Threshold", minval=0.1, maxval=1.0, step=0.05, group=g7, display=display.none,
+     tooltip="|Correlation| is value ya upar ho to relation 'Strong' maana jayega.")
+decoupleThr = input.float(0.30, "Decoupled Below |Corr|", minval=0.0, maxval=0.9, step=0.05, group=g7, display=display.none,
+     tooltip="|Correlation| is value se neeche chali jaye (jabki pehle isse upar thi) to relation 'Decoupled' (khatam) maana jayega. Isse neeche 'Weak' bhi maana jata hai.")
+trendTol = input.float(0.10, "Trend Tolerance (change in |Corr|)", minval=0.01, maxval=0.5, step=0.01, group=g7, display=display.none,
+     tooltip="|Correlation| me itna ya zyada badlav ho to hi 'Strengthening' ya 'Weakening' kaha jayega, warna 'Stable'.")
+
+//====================================================
+// 08. LEAD-LAG SETTINGS
+//====================================================
+maxLag = input.int(5, "Max Lag (bars)", minval=1, maxval=20, group=g8, display=display.none,
+     tooltip="Kitne bars aage-peeche ka lag test karna hai (-Max Lag se +Max Lag). Daily chart par 5 = 5 din tak. Zyada lag = zyada calculation.")
+leadEdge = input.float(0.05, "Lead Edge (min gain over lag 0)", minval=0.0, maxval=0.5, step=0.01, group=g8, display=display.none,
+     tooltip="Kisi asset ko Leader tabhi maana jayega jab lag par correlation, same-bar (lag 0) correlation se kam se kam itni zyada ho. Warna 'Simultaneous' (dono saath chalte hain).")
+leadPrimary = input.int(2, "Primary Window (1-4)", minval=1, maxval=4, group=g8, display=display.none,
+     tooltip="Lag Profile (Section C) aur Lead-Lag summary kis window par chalein. 1 = Window 1, 2 = Window 2...")
+
+//====================================================
+// 09. TABLE STYLE
+//====================================================
+scanSizeStr = input.string("Small", "Scanner Table Size", options=["Tiny", "Small", "Normal", "Large", "Huge"], group=g9, display=display.none,
+     tooltip="Scanner table ke text ka size. Tiny = sabse chhota, Huge = sabse bada.")
+scanPosStr = input.string("Top Right", "Scanner Table Position", options=["Top Right", "Top Left", "Top Center", "Middle Right", "Middle Left", "Bottom Right", "Bottom Left", "Bottom Center"], group=g9, display=display.none,
+     tooltip="Scanner table chart par kahan dikhe.")
+pairSizeStr = input.string("Small", "Pair Study Table Size", options=["Tiny", "Small", "Normal", "Large", "Huge"], group=g9, display=display.none,
+     tooltip="Pair Study table ke text ka size. Sections zyada ON hon aur table screen se bahar jaye to Tiny karein ya kuch sections OFF karein.")
+pairPosStr = input.string("Top Right", "Pair Study Table Position", options=["Top Right", "Top Left", "Top Center", "Middle Right", "Middle Left", "Bottom Right", "Bottom Left", "Bottom Center"], group=g9, display=display.none,
+     tooltip="Pair Study table chart par kahan dikhe. Scanner ke saath dono ON karein to alag position dein.")
+heatmapOn = input.bool(true, "Heatmap Shading (correlation cells)", group=g9, display=display.none,
+     tooltip="ON: correlation ke dabbe ka background value ke hisaab se green (positive) ya red (negative) shade hota hai; jitna gehra, utni strong correlation. OFF: sirf text ka color.")
+
+//====================================================
+// TABLE STYLE  (RB-A02 ka dark navy theme)
+//====================================================
+color cTitleBg = color.rgb(24, 38, 71)
+color cSecBg   = color.rgb(42, 52, 84)
+color cRowA    = color.rgb(22, 27, 40)
+color cRowB    = color.rgb(31, 37, 54)
+color cBorder  = color.rgb(58, 64, 84)
+color cText    = color.rgb(235, 238, 245)
+color cGrey    = color.rgb(165, 171, 190)
+color cGreen   = color.rgb(0, 200, 110)
+color cRed     = color.rgb(240, 62, 72)
+color cYellow  = color.rgb(255, 214, 10)
+color cShadeG  = color.rgb(0, 120, 75)
+color cShadeR  = color.rgb(155, 36, 46)
+color cBestBg  = color.rgb(20, 70, 50)
+
+//====================================================
+// DATA TYPE
+//====================================================
+type AssetData
+    array<float> cl
+    array<float> rt
+
+//====================================================
+// HELPER FUNCTIONS
+//====================================================
+f_pos(string s) =>
+    switch s
+        "Top Left"      => position.top_left
+        "Top Center"    => position.top_center
+        "Middle Right"  => position.middle_right
+        "Middle Left"   => position.middle_left
+        "Bottom Right"  => position.bottom_right
+        "Bottom Left"   => position.bottom_left
+        "Bottom Center" => position.bottom_center
+        => position.top_right
+
+f_size(string s) =>
+    switch s
+        "Tiny"  => size.tiny
+        "Small" => size.small
+        "Large" => size.large
+        "Huge"  => size.huge
+        => size.normal
+
+string posScan = f_pos(scanPosStr)
+string posPair = f_pos(pairPosStr)
+string szScan  = f_size(scanSizeStr)
+string szPair  = f_size(pairSizeStr)
+
+f_date(int t) =>
+    na(t) ? "N/A" : str.format_time(t, "yyyy-MM-dd HH:mm", displayTz)
+
+f_c2(float v) =>
+    na(v) ? "-" : (v > 0 ? "+" : "") + str.tostring(v, "0.00")
+
+f_p2(float v) =>
+    na(v) ? "-" : (v > 0 ? "+" : "") + str.tostring(v, "0.00") + "%"
+
+f_short(string s) =>
+    array<string> parts = str.split(s, ":")
+    array.get(parts, array.size(parts) - 1)
+
+f_clr(float v) =>
+    na(v) ? cGrey : v >= 0.2 ? cGreen : v <= -0.2 ? cRed : cGrey
+
+f_shade(float cv, float maxAbs, color base) =>
+    color out = base
+    if not na(cv) and maxAbs > 0
+        float t = math.min(math.abs(cv) / maxAbs, 1.0)
+        out := cv >= 0 ? color.from_gradient(t, 0.0, 1.0, base, cShadeG) : color.from_gradient(t, 0.0, 1.0, base, cShadeR)
+    out
+
+f_strength(float c) =>
+    string s = "n/a"
+    if not na(c)
+        float a = math.abs(c)
+        s := a >= strongThr ? "Strong" : a >= decoupleThr ? "Moderate" : a >= 0.1 ? "Weak" : "None"
+        if c < 0 and a >= decoupleThr
+            s += " (inverse)"
+    s
+
+// Trend: |corr| ka badlav + decouple check
+f_trend(float nowC, float pastC, float pastMaxAbs) =>
+    string t = "n/a"
+    color col = cGrey
+    if not na(nowC) and not na(pastC)
+        float d = math.abs(nowC) - math.abs(pastC)
+        if math.abs(nowC) < decoupleThr and not na(pastMaxAbs) and pastMaxAbs >= decoupleThr
+            t := "Decoupled ✕"
+            col := cRed
+        else if d >= trendTol
+            t := "Strengthening ▲"
+            col := cGreen
+        else if d <= -trendTol
+            t := "Weakening ▼"
+            col := cRed
+        else
+            t := "Stable ●"
+            col := cGrey
+    [t, col]
+
+// Pearson stats: pairs (x[j], y[j + shiftY]) for j in [start, start + cnt - 1]
+// returns [corr, beta(y on x), n, agree%]
+f_stats(array<float> x, array<float> y, int start, int cnt, int shiftY, float minPct) =>
+    float corr = na
+    float beta = na
+    float agree = na
+    int n = 0
+    if start >= 0 and cnt > 1 and start + cnt - 1 < array.size(x) and start + shiftY >= 0 and start + cnt - 1 + shiftY < array.size(y)
+        float sx = 0.0
+        float sy = 0.0
+        float sxx = 0.0
+        float syy = 0.0
+        float sxy = 0.0
+        int same = 0
+        for j = start to start + cnt - 1
+            float xv = array.get(x, j)
+            float yv = array.get(y, j + shiftY)
+            if not na(xv) and not na(yv)
+                n += 1
+                sx += xv
+                sy += yv
+                sxx += xv * xv
+                syy += yv * yv
+                sxy += xv * yv
+                if xv * yv > 0
+                    same += 1
+        if n >= math.max(5, int(math.ceil(cnt * minPct / 100.0)))
+            float mx = sx / n
+            float my = sy / n
+            float vx = sxx / n - mx * mx
+            float vy = syy / n - my * my
+            float cv = sxy / n - mx * my
+            if vx > 0 and vy > 0
+                corr := math.max(-1.0, math.min(1.0, cv / math.sqrt(vx * vy)))
+                beta := cv / vx
+            agree := same * 100.0 / n
+    [corr, beta, n, agree]
+
+// k >= 0 : A leads B by k bars | k < 0 : B leads A by |k| bars. e = end offset (0 = latest bar)
+f_lagStats(array<float> a, array<float> b, int m, int e, int w, int k, float minPct) =>
+    float cc = na
+    float bb = na
+    int nn = 0
+    float gg = na
+    int ak = math.abs(k)
+    int st = m - e - ak - w
+    if k >= 0
+        [c1, b1, n1, g1] = f_stats(a, b, st, w, ak, minPct)
+        cc := c1
+        bb := b1
+        nn := n1
+        gg := g1
+    else
+        [c2, b2, n2, g2] = f_stats(b, a, st, w, ak, minPct)
+        cc := c2
+        bb := b2
+        nn := n2
+        gg := g2
+    [cc, bb, nn, gg]
+
+// Best lag (max |corr|) in [-L, L]  -> [bestK, bestCorr, corr0, betaAtBest, beta0]
+f_best(array<float> a, array<float> b, int m, int e, int w, int L, float minPct) =>
+    int bestK = 0
+    float bestC = na
+    float c0 = na
+    float bestBeta = na
+    float beta0 = na
+    for k = -L to L
+        [c, bt, n, g] = f_lagStats(a, b, m, e, w, k, minPct)
+        if k == 0
+            c0 := c
+            beta0 := bt
+        if not na(c)
+            if na(bestC) or math.abs(c) > math.abs(bestC)
+                bestC := c
+                bestK := k
+                bestBeta := bt
+    [bestK, bestC, c0, bestBeta, beta0]
+
+// Leader sirf tab maana jaye jab lag par corr, lag-0 se leadEdge zyada ho
+f_effK(int k, float bc, float c0) =>
+    (not na(bc) and not na(c0) and k != 0 and math.abs(bc) - math.abs(c0) >= leadEdge) ? k : 0
+
+// Window ka compounded return % (log returns ka sum)
+f_sumRet(array<float> a, int m, int e, int w) =>
+    float res = na
+    int st = m - e - w
+    if st >= 0
+        float s = 0.0
+        int n = 0
+        for j = st to st + w - 1
+            float v = array.get(a, j)
+            if not na(v)
+                s += v
+                n += 1
+        if n > 0
+            res := (math.exp(s) - 1.0) * 100.0
+    res
+
+// Window ki volatility (stdev of returns, % per bar)
+f_stdev(array<float> a, int m, int e, int w) =>
+    float res = na
+    int st = m - e - w
+    if st >= 0
+        float s = 0.0
+        float ss = 0.0
+        int n = 0
+        for j = st to st + w - 1
+            float v = array.get(a, j)
+            if not na(v)
+                s += v
+                ss += v * v
+                n += 1
+        if n > 2
+            float mean = s / n
+            res := math.sqrt(math.max(ss / n - mean * mean, 0.0)) * 100.0
+    res
+
+f_lagTime(int k) =>
+    string s = "-"
+    if k == 0
+        s := "0"
+    else
+        float sec = math.abs(k) * timeframe.in_seconds()
+        if sec >= 86400
+            s := str.tostring(sec / 86400.0, "0.0") + " day"
+        else if sec >= 3600
+            s := str.tostring(sec / 3600.0, "0.0") + " hr"
+        else
+            s := str.tostring(sec / 60.0, "0") + " min"
+    s
+
+//---------------- table helpers ----------------
+f_cell(table t, int c, int r, string txt, color tc, color bg, string ha, string sz, bool bold) =>
+    table.cell(t, c, r, txt, text_color=tc, bgcolor=bg, text_halign=ha, text_size=sz, text_formatting=bold ? text.format_bold : text.format_none)
+
+f_title(table t, int row, int nCols, string txt, string sz) =>
+    f_cell(t, 0, row, txt, cText, cTitleBg, text.align_center, sz, true)
+    for c = 1 to nCols - 1
+        f_cell(t, c, row, "", cText, cTitleBg, text.align_center, sz, false)
+    table.merge_cells(t, 0, row, nCols - 1, row)
+
+f_sec(table t, int row, int nCols, string txt, string sz) =>
+    f_cell(t, 0, row, txt, cYellow, cTitleBg, text.align_left, sz, true)
+    for c = 1 to nCols - 1
+        f_cell(t, c, row, "", cYellow, cTitleBg, text.align_left, sz, false)
+    table.merge_cells(t, 0, row, nCols - 1, row)
+
+f_info(table t, int row, int nCols, string lbl, string val, color vc, string sz) =>
+    color bg = row % 2 == 0 ? cRowA : cRowB
+    f_cell(t, 0, row, lbl, cText, bg, text.align_left, sz, false)
+    f_cell(t, 1, row, val, vc, bg, text.align_right, sz, false)
+    for c = 2 to nCols - 1
+        f_cell(t, c, row, "", cText, bg, text.align_right, sz, false)
+    table.merge_cells(t, 1, row, nCols - 1, row)
+
+f_row(table t, int row, array<string> txt, array<color> tcs, color bg, bool isHead, string sz) =>
+    for c = 0 to array.size(txt) - 1
+        string ha = c == 0 ? text.align_left : (isHead ? text.align_center : text.align_right)
+        f_cell(t, c, row, array.get(txt, c), array.get(tcs, c), bg, ha, sz, isHead)
+
+// correlation cell with optional heatmap
+f_corrCell(table t, int c, int r, float v, color rowBg, string sz) =>
+    string txt = f_c2(v)
+    color bg = heatmapOn ? f_shade(v, 1.0, rowBg) : rowBg
+    color tc = heatmapOn ? (na(v) ? cGrey : cText) : f_clr(v)
+    f_cell(t, c, r, txt, tc, bg, text.align_right, sz, false)
+
+//====================================================
+// CHART FIRST CANDLE / RANGE
+//====================================================
+var int chartFirstTime = na
+if na(chartFirstTime)
+    chartFirstTime := time
+
+int fromDate = useChartFirstAsFrom ? chartFirstTime : manualFromDate
+bool inRange = time >= fromDate and time <= toDate
+
+var int fromBarIdx = na
+if inRange and na(fromBarIdx)
+    fromBarIdx := bar_index
+
+//====================================================
+// ASSET DATA COLLECTION
+//====================================================
+var array<string> symAll  = array.from(s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15, s16, s17, s18, s19, s20)
+var array<string> nameAll = array.new_string()
+var array<AssetData> store = array.new<AssetData>()
+
+if barstate.isfirst
+    for i = 0 to 19
+        array.push(nameAll, f_short(array.get(symAll, i)))
+    for i = 0 to nAssets - 1
+        array.push(store, AssetData.new(array.new_float(), array.new_float()))
+
+array<float> closes = array.new_float()
+for i = 0 to nAssets - 1
+    array.push(closes, request.security(array.get(symAll, i), timeframe.period, close, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off))
+
+bool recBar = inRange and barstate.isconfirmed
+
+if recBar
+    for i = 0 to nAssets - 1
+        AssetData ad = array.get(store, i)
+        float c = array.get(closes, i)
+        int mm = array.size(ad.cl)
+        float prev = mm > 0 ? array.get(ad.cl, mm - 1) : na
+        float rtv = na
+        if not na(c) and not na(prev) and c > 0 and prev > 0
+            if not (ignoreStale and c == prev)
+                rtv := math.log(c / prev)
+        if mm > 0
+            array.push(ad.rt, rtv)
+        array.push(ad.cl, c)
+
+f_nm(int i) =>
+    array.get(nameAll, i)
+
+f_leader(int ia, int ib, int k) =>
+    string s = "Simultaneous"
+    if k > 0
+        s := f_nm(ia) + " → " + f_nm(ib)
+    else if k < 0
+        s := f_nm(ib) + " → " + f_nm(ia)
+    s
+
+//====================================================
+// TABLES  (sirf last bar par)
+//====================================================
+var table tblScan = na
+var table tblPair = na
+
+if barstate.islast
+    if not na(tblScan)
+        table.delete(tblScan)
+        tblScan := na
+    if not na(tblPair)
+        table.delete(tblPair)
+        tblPair := na
+
+    AssetData ad0 = array.get(store, 0)
+    int m = array.size(ad0.rt)
+    int totalPairs = nAssets * (nAssets - 1) / 2
+
+    //------------------------------------------------
+    // SCAN (sab pairs)
+    //------------------------------------------------
+    array<int>   mA    = array.new_int(0)
+    array<int>   mB    = array.new_int(0)
+    array<float> mC    = array.new_float(0)
+    array<float> mP    = array.new_float(0)
+    array<float> mPMax = array.new_float(0)
+    array<int>   mK    = array.new_int(0)
+    array<float> mKC   = array.new_float(0)
+
+    bool needScan = showScanner or studyRank > 0
+    if needScan and m >= scanW
+        for i = 0 to nAssets - 2
+            AssetData ai = array.get(store, i)
+            for j = i + 1 to nAssets - 1
+                AssetData aj = array.get(store, j)
+                [c0, b0, n0, g0] = f_stats(ai.rt, aj.rt, m - scanW, scanW, 0, minValidPct)
+                bool ok = not na(c0) and math.abs(c0) >= minAbsCorr and (dirStr == "Both" or (dirStr == "Positive (follow)" and c0 > 0) or (dirStr == "Negative (inverse)" and c0 < 0))
+                if ok
+                    [pc, pb, pn, pg] = f_stats(ai.rt, aj.rt, m - trendShift - scanW, scanW, 0, minValidPct)
+                    [bk, bc, cz, bb, bz] = f_best(ai.rt, aj.rt, m, 0, scanW, maxLag, minValidPct)
+                    int ek = f_effK(bk, bc, cz)
+                    array.push(mA, i)
+                    array.push(mB, j)
+                    array.push(mC, c0)
+                    array.push(mP, pc)
+                    array.push(mPMax, na(pc) ? na : math.abs(pc))
+                    array.push(mK, ek)
+                    array.push(mKC, ek == 0 ? cz : bc)
+
+    int matchedN = array.size(mA)
+
+    array<int> srt = array.new_int(0)
+    if matchedN > 0
+        array<float> keys = array.new_float(matchedN, 0.0)
+        for q = 0 to matchedN - 1
+            float cNow = array.get(mC, q)
+            float cPast = array.get(mP, q)
+            float dAbs = (na(cPast) ? 0.0 : math.abs(cNow) - math.abs(cPast))
+            float key = math.abs(cNow)
+            if sortStr == "Correlation (high to low)"
+                key := cNow
+            else if sortStr == "Correlation (low to high)"
+                key := -cNow
+            else if sortStr == "Strengthening first"
+                key := dAbs
+            else if sortStr == "Weakening first"
+                key := -dAbs
+            array.set(keys, q, key)
+        srt := array.sort_indices(keys, order.descending)
+
+    int perPage = rowsPerPage <= 0 ? math.max(matchedN, 1) : rowsPerPage
+    int pages = math.max(1, int(math.ceil(matchedN * 1.0 / perPage)))
+    int pg = math.min(math.max(pageNo, 1), pages)
+    int startI = (pg - 1) * perPage
+    int endI = math.min(startI + perPage, matchedN) - 1
+    string pageTxt = "Page " + str.tostring(pg) + " / " + str.tostring(pages)
+
+    //------------------------------------------------
+    // SCANNER TABLE
+    //------------------------------------------------
+    if showScanner
+        tblScan := table.new(posScan, 8, 16 + math.max(perPage, 1), border_color=cBorder, border_width=1, frame_color=cBorder, frame_width=1)
+        int nr = 0
+        f_title(tblScan, nr, 8, "CORRELATION SCANNER  |  " + timeframe.period + "  |  " + str.tostring(scanW) + " bars", szScan)
+        nr += 1
+        f_info(tblScan, nr, 8, "Chart First Candle", f_date(chartFirstTime), cYellow, szScan)
+        nr += 1
+        f_info(tblScan, nr, 8, "Selected From", f_date(fromDate), cText, szScan)
+        nr += 1
+        f_info(tblScan, nr, 8, "Selected To", f_date(toDate), cText, szScan)
+        nr += 1
+        f_info(tblScan, nr, 8, "Assets | Pairs Scanned", str.tostring(nAssets) + "  |  " + str.tostring(totalPairs), cText, szScan)
+        nr += 1
+        f_info(tblScan, nr, 8, "Filter", dirStr + "  |  |Corr| >= " + str.tostring(minAbsCorr, "0.00") + "  |  Trend shift " + str.tostring(trendShift), cText, szScan)
+        nr += 1
+        f_info(tblScan, nr, 8, "Pairs Matched", str.tostring(matchedN) + "  |  Bars in range: " + str.tostring(m + 1), matchedN > 0 ? cGreen : cYellow, szScan)
+        nr += 1
+        if m < scanW
+            f_info(tblScan, nr, 8, "Warning", "Data kam: " + str.tostring(m) + " bars, Scan Window " + str.tostring(scanW) + " chahiye", cRed, szScan)
+            nr += 1
+        else if m < scanW + trendShift
+            f_info(tblScan, nr, 8, "Note", "Trend ke liye " + str.tostring(scanW + trendShift) + " bars chahiye (abhi " + str.tostring(m) + ")", cYellow, szScan)
+            nr += 1
+        if pages > 1
+            f_info(tblScan, nr, 8, "Page", pageTxt + "  (Settings me Page No. badlein)", cYellow, szScan)
+            nr += 1
+        f_info(tblScan, nr, 8, "Tip", "Deep study: Study Pair From Scanner Rank me # daalein", cGrey, szScan)
+        nr += 1
+
+        f_row(tblScan, nr, array.from("#", "Asset A", "Asset B", "Corr", "Past Corr", "Δ|Corr|", "Trend", "Lead-Lag"), array.from(cText, cText, cText, cText, cText, cText, cText, cText), cSecBg, true, szScan)
+        nr += 1
+
+        if matchedN > 0
+            for i = startI to endI
+                int qi = array.get(srt, i)
+                int ia = array.get(mA, qi)
+                int ib = array.get(mB, qi)
+                float cn = array.get(mC, qi)
+                float cp = array.get(mP, qi)
+                float cpm = array.get(mPMax, qi)
+                int ek = array.get(mK, qi)
+                float dl = (na(cp) ? na : math.abs(cn) - math.abs(cp))
+                [tTxt, tCol] = f_trend(cn, cp, cpm)
+                string ld = ek == 0 ? "Simultaneous" : f_leader(ia, ib, ek) + " (" + str.tostring(math.abs(ek)) + "b)"
+                color bg = nr % 2 == 0 ? cRowA : cRowB
+                f_row(tblScan, nr, array.from(str.tostring(i + 1), f_nm(ia), f_nm(ib), "", "", f_c2(dl), tTxt, ld), array.from(cGrey, cText, cText, cText, cText, f_clr(dl), tCol, cText), bg, false, szScan)
+                f_corrCell(tblScan, 3, nr, cn, bg, szScan)
+                f_corrCell(tblScan, 4, nr, cp, bg, szScan)
+                nr += 1
+
+    //------------------------------------------------
+    // PAIR RESOLVE
+    //------------------------------------------------
+    int idxA = math.min(studyA, nAssets) - 1
+    int idxB = math.min(studyB, nAssets) - 1
+    string pairSrc = "Manual slots"
+    if studyRank > 0
+        if matchedN >= studyRank
+            int qs = array.get(srt, studyRank - 1)
+            idxA := array.get(mA, qs)
+            idxB := array.get(mB, qs)
+            pairSrc := "Scanner rank #" + str.tostring(studyRank)
+        else
+            pairSrc := "Rank #" + str.tostring(studyRank) + " nahi mila (matched " + str.tostring(matchedN) + ") -> manual slots"
+
+    //------------------------------------------------
+    // PAIR STUDY TABLE
+    //------------------------------------------------
+    if showPair
+        tblPair := table.new(posPair, 8, 80, border_color=cBorder, border_width=1, frame_color=cBorder, frame_width=1)
+        int pr = 0
+        f_title(tblPair, pr, 8, "PAIR STUDY  |  " + f_nm(idxA) + " vs " + f_nm(idxB) + "  |  " + timeframe.period, szPair)
+        pr += 1
+
+        if idxA == idxB
+            f_info(tblPair, pr, 8, "Warning", "Asset A aur B alag chunein", cRed, szPair)
+            pr += 1
+        else
+            AssetData pa = array.get(store, idxA)
+            AssetData pbd = array.get(store, idxB)
+            array<float> ra = pa.rt
+            array<float> rb = pbd.rt
+            array<int> winArr = array.from(win1, win2, win3, win4)
+
+            int maxW = 0
+            for k = 0 to nWin - 1
+                maxW := math.max(maxW, array.get(winArr, k))
+            int needBars = maxW + 3 * snapStep + maxLag
+
+            // verdict (shortest vs longest window, abhi ki correlation)
+            int wS = array.get(winArr, 0)
+            int wL = array.get(winArr, nWin - 1)
+            [cS, bS, nS, gS] = f_stats(ra, rb, m - wS, wS, 0, minValidPct)
+            [cL, bL, nL, gL] = f_stats(ra, rb, m - wL, wL, 0, minValidPct)
+            string verdict = "Data kam"
+            color verdictCol = cYellow
+            if not na(cS) and not na(cL)
+                float aS = math.abs(cS)
+                float aL = math.abs(cL)
+                if aS >= strongThr and aL >= strongThr
+                    verdict := (cS < 0 and cL < 0 ? "Strong INVERSE link (short + long)" : "Strong link (short + long)")
+                    verdictCol := cGreen
+                else if aS < decoupleThr and aL >= strongThr
+                    verdict := "Recent breakdown: long-term link tha, short-term toot gaya"
+                    verdictCol := cRed
+                else if aS >= strongThr and aL < strongThr
+                    verdict := "Naya / tightening link: short-term strong, long-term weak"
+                    verdictCol := cGreen
+                else if aS < decoupleThr and aL < decoupleThr
+                    verdict := "Koi meaningful relation nahi"
+                    verdictCol := cRed
+                else
+                    verdict := "Moderate / mixed relation"
+                    verdictCol := cYellow
+
+            f_info(tblPair, pr, 8, "Chart First Candle", f_date(chartFirstTime), cYellow, szPair)
+            pr += 1
+            f_info(tblPair, pr, 8, "Selected From", f_date(fromDate), cText, szPair)
+            pr += 1
+            f_info(tblPair, pr, 8, "Selected To", f_date(toDate), cText, szPair)
+            pr += 1
+            f_info(tblPair, pr, 8, "Asset A", "Slot " + str.tostring(idxA + 1) + "  |  " + array.get(symAll, idxA), cText, szPair)
+            pr += 1
+            f_info(tblPair, pr, 8, "Asset B", "Slot " + str.tostring(idxB + 1) + "  |  " + array.get(symAll, idxB), cText, szPair)
+            pr += 1
+            f_info(tblPair, pr, 8, "Pair Source", pairSrc, cGrey, szPair)
+            pr += 1
+            f_info(tblPair, pr, 8, "Bars in Range", str.tostring(m + 1), cText, szPair)
+            pr += 1
+            f_info(tblPair, pr, 8, "Verdict", verdict, verdictCol, szPair)
+            pr += 1
+            if m < needBars
+                f_info(tblPair, pr, 8, "Warning", "Poore snapshots ke liye " + str.tostring(needBars) + " bars chahiye (abhi " + str.tostring(m) + "); kuch cells n/a", cYellow, szPair)
+                pr += 1
+
+            //--------------------------------------------
+            // A. ROLLING CORRELATION PHASES
+            //--------------------------------------------
+            if secPhases
+                f_sec(tblPair, pr, 8, "A. ROLLING CORRELATION PHASES  (corr, Now vs pichle snapshots)", szPair)
+                pr += 1
+                f_row(tblPair, pr, array.from("Window", "Now", "-" + str.tostring(snapStep) + "b", "-" + str.tostring(2 * snapStep) + "b", "-" + str.tostring(3 * snapStep) + "b", "Δ|Corr|", "Agree %", "Status"), array.from(cText, cText, cText, cText, cText, cText, cText, cText), cSecBg, true, szPair)
+                pr += 1
+                for k = 0 to nWin - 1
+                    int w = array.get(winArr, k)
+                    [c0, b0, n0, g0] = f_stats(ra, rb, m - w, w, 0, minValidPct)
+                    [c1, b1, n1, g1] = f_stats(ra, rb, m - snapStep - w, w, 0, minValidPct)
+                    [c2, b2, n2, g2] = f_stats(ra, rb, m - 2 * snapStep - w, w, 0, minValidPct)
+                    [c3, b3, n3, g3] = f_stats(ra, rb, m - 3 * snapStep - w, w, 0, minValidPct)
+                    float pastMax = na
+                    if not na(c1)
+                        pastMax := math.abs(c1)
+                    if not na(c2)
+                        pastMax := na(pastMax) ? math.abs(c2) : math.max(pastMax, math.abs(c2))
+                    if not na(c3)
+                        pastMax := na(pastMax) ? math.abs(c3) : math.max(pastMax, math.abs(c3))
+                    float dl = (na(c0) or na(c1)) ? na : math.abs(c0) - math.abs(c1)
+                    [tTxt, tCol] = f_trend(c0, c1, pastMax)
+                    color bg = pr % 2 == 0 ? cRowA : cRowB
+                    f_row(tblPair, pr, array.from(str.tostring(w) + " bars", "", "", "", "", f_c2(dl), na(g0) ? "-" : str.tostring(g0, "0") + "%", f_strength(c0) + " | " + tTxt), array.from(cText, cText, cText, cText, cText, f_clr(dl), cGrey, tCol), bg, false, szPair)
+                    f_corrCell(tblPair, 1, pr, c0, bg, szPair)
+                    f_corrCell(tblPair, 2, pr, c1, bg, szPair)
+                    f_corrCell(tblPair, 3, pr, c2, bg, szPair)
+                    f_corrCell(tblPair, 4, pr, c3, bg, szPair)
+                    pr += 1
+
+            //--------------------------------------------
+            // B. LEAD-LAG & SPEED
+            //--------------------------------------------
+            if secLead
+                f_sec(tblPair, pr, 8, "B. LEAD-LAG & SPEED  (Leader → Follower)", szPair)
+                pr += 1
+                f_row(tblPair, pr, array.from("Window", "Lag (bars)", "Corr @Lag", "Corr @0", "Edge", "Leader → Follower", "Lag Time", "Beta"), array.from(cText, cText, cText, cText, cText, cText, cText, cText), cSecBg, true, szPair)
+                pr += 1
+                for k = 0 to nWin - 1
+                    int w = array.get(winArr, k)
+                    [bk, bc, cz, bb, bz] = f_best(ra, rb, m, 0, w, maxLag, minValidPct)
+                    int ek = f_effK(bk, bc, cz)
+                    float shownC = ek == 0 ? cz : bc
+                    float shownB = ek == 0 ? bz : bb
+                    float edge = (na(bc) or na(cz)) ? na : math.abs(bc) - math.abs(cz)
+                    color bg = pr % 2 == 0 ? cRowA : cRowB
+                    f_row(tblPair, pr, array.from(str.tostring(w) + " bars", na(bc) ? "-" : (ek > 0 ? "+" : "") + str.tostring(ek), "", "", f_c2(edge), na(bc) ? "n/a" : f_leader(idxA, idxB, ek), na(bc) ? "-" : f_lagTime(ek), na(shownB) ? "-" : str.tostring(shownB, "0.00")), array.from(cText, cText, cText, cText, cGrey, cText, cText, cText), bg, false, szPair)
+                    f_corrCell(tblPair, 2, pr, shownC, bg, szPair)
+                    f_corrCell(tblPair, 3, pr, cz, bg, szPair)
+                    pr += 1
+                f_info(tblPair, pr, 8, "Beta kya hai", "Follower ka move per 1% leader move (lag par). Edge = lag corr - same-bar corr", cGrey, szPair)
+                pr += 1
+
+            //--------------------------------------------
+            // C. LAG PROFILE (primary window)
+            //--------------------------------------------
+            if secProfile
+                int pw = array.get(winArr, math.min(leadPrimary, nWin) - 1)
+                f_sec(tblPair, pr, 8, "C. LAG PROFILE  (window " + str.tostring(pw) + " bars)", szPair)
+                pr += 1
+                f_row(tblPair, pr, array.from("Lag (bars)", "Direction", "Corr", "Strength", "", "", "", ""), array.from(cText, cText, cText, cText, cText, cText, cText, cText), cSecBg, true, szPair)
+                table.merge_cells(tblPair, 3, pr, 7, pr)
+                pr += 1
+                [pk, pc, pz, pbb, pbz] = f_best(ra, rb, m, 0, pw, maxLag, minValidPct)
+                for k = -maxLag to maxLag
+                    [lc, lb, ln, lg] = f_lagStats(ra, rb, m, 0, pw, k, minValidPct)
+                    color bg = pr % 2 == 0 ? cRowA : cRowB
+                    bool isBestRow = k == pk and not na(pc)
+                    int barN = na(lc) ? 0 : int(math.round(math.abs(lc) * 20))
+                    string dirTxt = f_leader(idxA, idxB, k)
+                    if k == 0
+                        dirTxt := "Same bar"
+                    f_cell(tblPair, 0, pr, (isBestRow ? "★ " : "") + (k > 0 ? "+" : "") + str.tostring(k), cText, isBestRow ? cBestBg : bg, text.align_left, szPair, false)
+                    f_cell(tblPair, 1, pr, dirTxt, cText, bg, text.align_right, szPair, false)
+                    f_corrCell(tblPair, 2, pr, lc, bg, szPair)
+                    f_cell(tblPair, 3, pr, na(lc) ? "-" : str.repeat("█", barN), f_clr(lc), bg, text.align_left, szPair, false)
+                    for cc = 4 to 7
+                        f_cell(tblPair, cc, pr, "", cText, bg, text.align_left, szPair, false)
+                    table.merge_cells(tblPair, 3, pr, 7, pr)
+                    pr += 1
+
+            //--------------------------------------------
+            // D. PERFORMANCE & RISK
+            //--------------------------------------------
+            if secPerf
+                f_sec(tblPair, pr, 8, "D. PERFORMANCE & RISK  (same window, lag 0)", szPair)
+                pr += 1
+                f_row(tblPair, pr, array.from("Window", f_nm(idxA) + " Ret %", f_nm(idxB) + " Ret %", "Spread A-B", "Beta (B on A)", "R²", "Vol A %/bar", "Vol B %/bar"), array.from(cText, cText, cText, cText, cText, cText, cText, cText), cSecBg, true, szPair)
+                pr += 1
+                for k = 0 to nWin - 1
+                    int w = array.get(winArr, k)
+                    float retA = f_sumRet(ra, m, 0, w)
+                    float retB = f_sumRet(rb, m, 0, w)
+                    float spr = (na(retA) or na(retB)) ? na : retA - retB
+                    [cc0, bt0, nn0, gg0] = f_stats(ra, rb, m - w, w, 0, minValidPct)
+                    float r2 = na(cc0) ? na : cc0 * cc0
+                    float volA = f_stdev(ra, m, 0, w)
+                    float volB = f_stdev(rb, m, 0, w)
+                    color bg = pr % 2 == 0 ? cRowA : cRowB
+                    f_row(tblPair, pr, array.from(str.tostring(w) + " bars", f_p2(retA), f_p2(retB), f_p2(spr), na(bt0) ? "-" : str.tostring(bt0, "0.00"), na(r2) ? "-" : str.tostring(r2, "0.00"), na(volA) ? "-" : str.tostring(volA, "0.00"), na(volB) ? "-" : str.tostring(volB, "0.00")), array.from(cText, f_clr(retA), f_clr(retB), f_clr(spr), cText, cGrey, cGrey, cGrey), bg, false, szPair)
+                    pr += 1
+
+//====================================================
+// SELECTED DATE RANGE VERTICAL LINES
+//====================================================
+var line selectedFromLine = na
+var line selectedToLine = na
+
+if barstate.islast
+
+    if not na(selectedFromLine)
+        line.delete(selectedFromLine)
+        selectedFromLine := na
+
+    if not na(selectedToLine)
+        line.delete(selectedToLine)
+        selectedToLine := na
+
+    if showRangeVerticalLines
+
+        float lineTop = high == low ? high + syminfo.mintick : high
+
+        if not na(fromBarIdx)
+            selectedFromLine := line.new(x1=fromBarIdx, y1=low, x2=fromBarIdx, y2=lineTop, xloc=xloc.bar_index, extend=extend.both, color=color.lime, style=line.style_dashed, width=1)
+
+        selectedToLine := line.new(x1=toDate, y1=low, x2=toDate, y2=lineTop, xloc=xloc.bar_time, extend=extend.both, color=color.red, style=line.style_dashed, width=1)
